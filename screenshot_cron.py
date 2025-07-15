@@ -909,7 +909,13 @@ class WebScreenshot:
             options.add_argument('--disable-images')  # Faster loading
             
             # Install and setup Firefox driver with custom cache directory
-            driver_manager = GeckoDriverManager(cache_valid_range=7, path=self.cache_dir)
+            try:
+                # Try with cache_valid_range first (older versions)
+                driver_manager = GeckoDriverManager(cache_valid_range=7, path=self.cache_dir)
+            except TypeError:
+                # Fall back to newer version without cache_valid_range
+                driver_manager = GeckoDriverManager(path=self.cache_dir)
+            
             driver_path = driver_manager.install()
             service = FirefoxService(driver_path)
             
@@ -942,7 +948,13 @@ class WebScreenshot:
             options.add_argument('--disable-images')  # Faster loading
             
             # Install and setup Chrome driver with custom cache directory
-            driver_manager = ChromeDriverManager(cache_valid_range=7, path=self.cache_dir)
+            try:
+                # Try with cache_valid_range first (older versions)
+                driver_manager = ChromeDriverManager(cache_valid_range=7, path=self.cache_dir)
+            except TypeError:
+                # Fall back to newer version without cache_valid_range
+                driver_manager = ChromeDriverManager(path=self.cache_dir)
+            
             driver_path = driver_manager.install()
             service = ChromeService(driver_path)
             
