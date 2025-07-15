@@ -35,7 +35,8 @@ sudo apt-get install -y \
     xvfb \
     systemd \
     wget \
-    curl
+    curl \
+    gnome-screenshot
 
 # Install Firefox for web screenshots
 echo "🦊 Installing Firefox..."
@@ -73,6 +74,17 @@ sudo chmod 755 /var/run
 # Set proper permissions for screenshot directories
 sudo chmod 755 /var/screenshots
 sudo chmod 755 /opt/screenshot-daemon
+
+# Create home directory for screenshot user
+echo "🏠 Setting up screenshot user home directory..."
+sudo mkdir -p /home/screenshot
+sudo chown screenshot:screenshot /home/screenshot
+sudo chmod 755 /home/screenshot
+
+# Create cache directories for WebDriver
+sudo mkdir -p /tmp/webdriver_cache
+sudo chown screenshot:screenshot /tmp/webdriver_cache
+sudo chmod 755 /tmp/webdriver_cache
 
 # Create Python virtual environment
 echo "🐍 Setting up Python environment..."

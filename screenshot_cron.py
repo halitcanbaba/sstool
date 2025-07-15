@@ -47,6 +47,12 @@ try:
     from webdriver_manager.firefox import GeckoDriverManager
     from selenium.webdriver.chrome.service import Service as ChromeService
     from selenium.webdriver.firefox.service import Service as FirefoxService
+    
+    # Set DISPLAY environment variable for headless operation if not set
+    if not os.environ.get('DISPLAY'):
+        os.environ['DISPLAY'] = ':99'
+        print("Warning: DISPLAY environment variable not set, using :99")
+        
 except ImportError as e:
     print(f"Error: Required library not installed: {e}")
     print("Install with: pip3 install pyautogui Pillow requests selenium webdriver-manager")
@@ -872,6 +878,12 @@ class WebScreenshot:
         self.headless = headless
         self.window_size = window_size
         self.driver = None
+        self.logger = logging.getLogger(__name__)
+        
+        # Set custom cache directory for WebDriver Manager
+        self.cache_dir = "/tmp/webdriver_cache"
+        os.makedirs(self.cache_dir, exist_ok=True)
+        os.environ['WDM_LOCAL'] = self.cache_dir
         self.logger = logging.getLogger(__name__)
     
     def _setup_firefox_driver(self):
