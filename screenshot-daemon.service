@@ -1,0 +1,29 @@
+[Unit]
+Description=Screenshot Monitoring Daemon
+After=network.target graphical-session.target
+
+[Service]
+Type=simple
+User=screenshot
+Group=screenshot
+WorkingDirectory=/opt/screenshot-daemon
+ExecStart=/usr/bin/xvfb-run -a /usr/bin/python3 /opt/screenshot-daemon/screenshot_cron.py start
+ExecStop=/usr/bin/python3 /opt/screenshot-daemon/screenshot_cron.py stop
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment variables
+Environment=DISPLAY=:99
+Environment=PYTHONUNBUFFERED=1
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/screenshots /var/run
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

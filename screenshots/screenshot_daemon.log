@@ -1,0 +1,48 @@
+2025-07-15 19:34:05,153 [INFO] Output directory ready: /Users/primetech/Documents/ss/screenshots
+2025-07-15 19:34:05,441 [INFO] ✅ Bot connected: @FXINDBOT (ABCD indicator)
+2025-07-15 19:34:05,443 [WARNING] No DISPLAY environment variable found. Make sure to run with xvfb-run.
+2025-07-15 19:34:05,444 [INFO] Screenshot daemon started
+2025-07-15 19:34:05,663 [INFO] Screenshot saved: center_2025-07-15_19-34-05.png (260846 bytes)
+2025-07-15 19:34:05,737 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:34:06,046 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:34:06,279 [INFO] ✅ Screenshot sent to Telegram group for region 'center'
+2025-07-15 19:34:06,281 [INFO] 🗑️ Screenshot deleted after Telegram send: center_2025-07-15_19-34-05.png
+2025-07-15 19:34:06,349 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:34:06,569 [ERROR] ❌ Failed to send text message: 400 - {"ok":false,"error_code":400,"description":"Bad Request: chat not found"}
+2025-07-15 19:34:06,822 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:34:13,190 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:34:13,511 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:34:13,829 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:34:14,144 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:34:16,944 [INFO] Screenshot saved: center_2025-07-15_19-34-16.png (295191 bytes)
+2025-07-15 19:34:17,677 [INFO] ✅ Screenshot sent to Telegram group for region 'center'
+2025-07-15 19:34:17,680 [INFO] 🗑️ Screenshot deleted after Telegram send: center_2025-07-15_19-34-16.png
+2025-07-15 19:34:27,918 [INFO] Screenshot saved: center_2025-07-15_19-34-27.png (315416 bytes)
+2025-07-15 19:34:28,557 [INFO] ✅ Screenshot sent to Telegram group for region 'center'
+2025-07-15 19:34:28,559 [INFO] 🗑️ Screenshot deleted after Telegram send: center_2025-07-15_19-34-27.png
+2025-07-15 19:34:38,908 [INFO] Screenshot saved: center_2025-07-15_19-34-38.png (351512 bytes)
+2025-07-15 19:34:39,509 [INFO] ✅ Screenshot sent to Telegram group for region 'center'
+2025-07-15 19:34:39,511 [INFO] 🗑️ Screenshot deleted after Telegram send: center_2025-07-15_19-34-38.png
+2025-07-15 19:34:49,738 [INFO] Screenshot saved: center_2025-07-15_19-34-49.png (244547 bytes)
+2025-07-15 19:34:50,387 [INFO] ✅ Screenshot sent to Telegram group for region 'center'
+2025-07-15 19:34:50,389 [INFO] 🗑️ Screenshot deleted after Telegram send: center_2025-07-15_19-34-49.png
+2025-07-15 19:35:00,722 [INFO] Screenshot saved: center_2025-07-15_19-35-00.png (243392 bytes)
+2025-07-15 19:35:01,401 [INFO] ✅ Screenshot sent to Telegram group for region 'center'
+2025-07-15 19:35:01,402 [INFO] 🗑️ Screenshot deleted after Telegram send: center_2025-07-15_19-35-00.png
+2025-07-15 19:35:11,764 [INFO] Screenshot saved: center_2025-07-15_19-35-11.png (244786 bytes)
+2025-07-15 19:35:12,481 [INFO] ✅ Screenshot sent to Telegram group for region 'center'
+2025-07-15 19:35:12,483 [INFO] 🗑️ Screenshot deleted after Telegram send: center_2025-07-15_19-35-11.png
+2025-07-15 19:35:22,873 [INFO] Screenshot saved: center_2025-07-15_19-35-22.png (244053 bytes)
+2025-07-15 19:35:23,555 [INFO] ✅ Screenshot sent to Telegram group for region 'center'
+2025-07-15 19:35:23,556 [INFO] 🗑️ Screenshot deleted after Telegram send: center_2025-07-15_19-35-22.png
+2025-07-15 19:35:24,652 [INFO] Received signal 2, shutting down...
+2025-07-15 19:35:24,869 [INFO] Received signal 2, shutting down...
+2025-07-15 19:35:25,188 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:35:25,479 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:35:25,753 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:35:25,996 [ERROR] ❌ Failed to send text message: 400 - {"ok":false,"error_code":400,"description":"Bad Request: chat not found"}
+2025-07-15 19:35:29,348 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:35:29,666 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:35:29,972 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:35:30,236 [INFO] ✅ Text message sent to chat -1002745524480
+2025-07-15 19:35:30,491 [INFO] ✅ Text message sent to chat -1002745524480
