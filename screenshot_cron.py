@@ -105,7 +105,47 @@ CONFIG = {
         },
         "active_urls": ["google"],  # Which URLs to capture
         "interval": 300,  # 5 minutes between web screenshots
-        "delete_after_send": True
+        "delete_after_send": True,
+        "scheduled_regions": {
+            "enabled": True,
+            "schedule": {
+                "09:00": {
+                    "url": "https://www.google.com",
+                    "region": "viewport",  # or "full_page", "element", "coordinates"
+                    "region_config": None,  # For element: CSS selector, for coordinates: [x,y,w,h]
+                    "telegram_chat_id": "-1002745524480",
+                    "description": "Google Ana Sayfa - Sabah Kontrolü"
+                },
+                "12:00": {
+                    "url": "https://github.com",
+                    "region": "element",
+                    "region_config": ".Header",
+                    "telegram_chat_id": "-1002745524480",
+                    "description": "GitHub Header - Öğle Kontrolü"
+                },
+                "15:00": {
+                    "url": "https://stackoverflow.com",
+                    "region": "coordinates",
+                    "region_config": [0, 0, 1200, 800],
+                    "telegram_chat_id": "-1002745524480",
+                    "description": "StackOverflow Üst Kısım - Öğleden Sonra"
+                },
+                "18:00": {
+                    "url": "https://www.google.com",
+                    "region": "viewport",
+                    "region_config": None,
+                    "telegram_chat_id": "-1002745524480",
+                    "description": "Google Ana Sayfa - Akşam Kontrolü"
+                },
+                "21:00": {
+                    "url": "https://github.com",
+                    "region": "viewport",
+                    "region_config": None,
+                    "telegram_chat_id": "-1002745524480",
+                    "description": "GitHub Ana Sayfa - Gece Kontrolü"
+                }
+            }
+        }
     },
     "telegram": {
         "enabled": True,
@@ -523,6 +563,302 @@ class ScreenshotDaemon:
         finally:
             web_handler.stop_driver()
 
+    def check_scheduled_web_screenshots(self):
+        """Check and execute scheduled web screenshots"""
+        try:
+            web_config = self.config["web_screenshots"]
+            if not web_config["enabled"] or not web_config["scheduled_regions"]["enabled"]:
+                return
+            
+            current_time = datetime.now()
+            current_time_str = current_time.strftime("%H:%M")
+            
+            schedule = web_config["scheduled_regions"]["schedule"]
+            
+            # Check if current time matches any scheduled time
+            if current_time_str in schedule:
+                scheduled_config = schedule[current_time_str]
+                
+                # Check if we already took screenshot for this hour
+                last_run_key = f"last_scheduled_{current_time_str.replace(':', '_')}"
+                last_run = getattr(self, last_run_key, None)
+                
+                if last_run and last_run.date() == current_time.date() and last_run.hour == current_time.hour:
+                    # Already took screenshot this hour
+                    return
+                
+                self.logger.info(f"🕐 Executing scheduled web screenshot for {current_time_str}")
+                
+                # Take scheduled screenshot
+                success = self.take_scheduled_web_screenshot(scheduled_config, current_time_str)
+                
+                if success:
+                    # Mark as completed for this hour
+                    setattr(self, last_run_key, current_time)
+                    self.logger.info(f"✅ Scheduled web screenshot completed for {current_time_str}")
+                else:
+                    self.logger.error(f"❌ Scheduled web screenshot failed for {current_time_str}")
+                    
+        except Exception as e:
+            self.logger.error(f"Error checking scheduled web screenshots: {e}")
+
+    def take_scheduled_web_screenshot(self, schedule_config, schedule_time):
+        """Take a scheduled web screenshot"""
+        try:
+            url = schedule_config["url"]
+            region_type = schedule_config["region"]
+            region_config = schedule_config["region_config"]
+            chat_id = schedule_config["telegram_chat_id"]
+            description = schedule_config["description"]
+            
+            # Generate filename
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            filename = f"scheduled_{schedule_time.replace(':', '-')}_{timestamp}.png"
+            filepath = self.output_dir / filename
+            
+            # Initialize web screenshot handler
+            web_handler = WebScreenshot(
+                browser=self.config["web_screenshots"]["browser"],
+                headless=self.config["web_screenshots"]["headless"],
+                window_size=self.config["web_screenshots"]["window_size"]
+            )
+            
+            if not web_handler.start_driver():
+                self.logger.error("Failed to start WebDriver for scheduled screenshot")
+                return False
+            
+            try:
+                # Take screenshot based on region type
+                success = web_handler.take_region_screenshot(
+                    url=url,
+                    output_path=str(filepath),
+                    region_type=region_type,
+                    region_config=region_config,
+                    wait_time=3
+                )
+                
+                if success:
+                    self.logger.info(f"📸 Scheduled web screenshot saved: {filepath}")
+                    
+                    # Send to Telegram if enabled
+                    if self.telegram_bot and chat_id:
+                        try:
+                            file_size = filepath.stat().st_size
+                            timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            
+                            # Custom message for scheduled screenshots
+                            message = f"🕐 Scheduled Web Screenshot\n📋 {description}\n🌐 URL: {url}\n🎯 Region: {region_type}\n📅 Time: {timestamp_str}\n📏 Size: {file_size} bytes"
+                            
+                            # Send photo directly to specific chat
+                            with open(filepath, 'rb') as photo:
+                                url_send = f"https://api.telegram.org/bot{self.telegram_bot.bot_token}/sendPhoto"
+                                data = {
+                                    'chat_id': chat_id,
+                                    'caption': message,
+                                    'parse_mode': 'HTML'
+                                }
+                                files = {'photo': photo}
+                                
+                                response = requests.post(url_send, data=data, files=files, timeout=30)
+                                
+                                if response.status_code == 200:
+                                    self.logger.info(f"✅ Scheduled web screenshot sent to Telegram: {description}")
+                                    self.stats["telegram_sent"] += 1
+                                    
+                                    # Delete file after successful send if configured
+                                    if self.config["web_screenshots"]["delete_after_send"]:
+                                        try:
+                                            filepath.unlink()
+                                            self.logger.info(f"🗑️ Scheduled screenshot deleted after Telegram send: {filename}")
+                                        except Exception as e:
+                                            self.logger.warning(f"Failed to delete scheduled screenshot: {e}")
+                                else:
+                                    self.logger.error(f"❌ Failed to send scheduled screenshot to Telegram: {response.status_code}")
+                                    self.stats["telegram_failed"] += 1
+                                    
+                        except Exception as e:
+                            self.logger.error(f"❌ Error sending scheduled screenshot to Telegram: {e}")
+                            self.stats["telegram_failed"] += 1
+                    
+                    self.stats["total_screenshots"] += 1
+                    return True
+                else:
+                    self.logger.error(f"Failed to take scheduled web screenshot: {url}")
+                    self.stats["failed_screenshots"] += 1
+                    return False
+                    
+            finally:
+                web_handler.stop_driver()
+                
+        except Exception as e:
+            self.logger.error(f"Error taking scheduled web screenshot: {e}")
+            self.stats["failed_screenshots"] += 1
+            return False
+
+    def start(self):
+        """Start the screenshot daemon"""
+        if self.running:
+            self.logger.warning("Daemon is already running")
+            return
+        
+        self.running = True
+        self.stats["start_time"] = datetime.now()
+        
+        # Send startup message to Telegram
+        if self.telegram_bot:
+            self.telegram_bot.send_startup_message()
+        
+        self.logger.info("🚀 Screenshot daemon started")
+        self.logger.info(f"📁 Output directory: {self.output_dir}")
+        self.logger.info(f"📸 Active regions: {', '.join(self.active_regions)}")
+        self.logger.info(f"⏱️ Screenshot interval: {self.interval} seconds")
+        
+        # Start background threads
+        self.thread = threading.Thread(target=self._daemon_loop)
+        self.thread.daemon = True
+        self.thread.start()
+        
+        # Keep main thread alive
+        try:
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.logger.info("Keyboard interrupt received")
+        finally:
+            self.stop()
+
+    def stop(self):
+        """Stop the screenshot daemon"""
+        if not self.running:
+            return
+        
+        self.logger.info("🛑 Stopping screenshot daemon...")
+        self.running = False
+        
+        # Send shutdown message to Telegram
+        if self.telegram_bot:
+            self.telegram_bot.send_shutdown_message()
+        
+        # Wait for thread to finish
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=5)
+        
+        # Remove PID file
+        self.remove_pid_file()
+        
+        self.logger.info("Screenshot daemon stopped")
+
+    def _daemon_loop(self):
+        """Main daemon loop"""
+        last_screenshot_time = 0
+        last_web_screenshot_time = 0
+        last_cleanup_time = 0
+        last_health_check_time = 0
+        
+        while self.running:
+            try:
+                current_time = time.time()
+                
+                # Regular screenshots
+                if current_time - last_screenshot_time >= self.interval:
+                    self.take_screenshot()
+                    last_screenshot_time = current_time
+                
+                # Web screenshots
+                web_config = self.config.get("web_screenshots", {})
+                if web_config.get("enabled", False):
+                    web_interval = web_config.get("interval", 300)
+                    if current_time - last_web_screenshot_time >= web_interval:
+                        self.take_web_screenshots()
+                        last_web_screenshot_time = current_time
+                
+                # Check scheduled web screenshots (every minute)
+                if current_time - last_health_check_time >= 60:
+                    self.check_scheduled_web_screenshots()
+                    last_health_check_time = current_time
+                
+                # Cleanup old screenshots
+                if (self.config.get("enable_cleanup", True) and 
+                    current_time - last_cleanup_time >= self.config.get("cleanup_interval", 3600)):
+                    self.cleanup_old_screenshots()
+                    last_cleanup_time = current_time
+                
+                # Sleep for a short time to avoid busy waiting
+                time.sleep(1)
+                
+            except Exception as e:
+                self.logger.error(f"Error in daemon loop: {e}")
+                if self.running:
+                    time.sleep(5)  # Sleep longer on error
+
+    def monitor_mode(self):
+        """Interactive monitoring mode"""
+        print("📊 Screenshot Daemon Monitor")
+        print("=" * 30)
+        print("Press Ctrl+C to exit")
+        print()
+        
+        try:
+            while True:
+                # Clear screen
+                os.system('clear' if os.name == 'posix' else 'cls')
+                
+                print("📊 Screenshot Daemon Monitor")
+                print("=" * 30)
+                print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print()
+                
+                # Show daemon status
+                if os.path.exists(PID_FILE):
+                    with open(PID_FILE, 'r') as f:
+                        pid = int(f.read().strip())
+                    try:
+                        os.kill(pid, 0)
+                        print(f"✅ Daemon Status: Running (PID: {pid})")
+                    except ProcessLookupError:
+                        print("❌ Daemon Status: Not Running (stale PID)")
+                else:
+                    print("❌ Daemon Status: Not Running")
+                
+                print(f"📁 Output Directory: {self.output_dir}")
+                print(f"📸 Active Regions: {', '.join(self.active_regions)}")
+                print(f"⏱️ Screenshot Interval: {self.interval} seconds")
+                print()
+                
+                # Show file statistics
+                if self.output_dir.exists():
+                    patterns = [f"{region_name}_*.png" for region_name in self.regions.keys()]
+                    patterns.extend(["screenshot_*.png", "web_*.png", "scheduled_*.png"])
+                    
+                    all_files = []
+                    for pattern in patterns:
+                        all_files.extend(self.output_dir.glob(pattern))
+                    
+                    if all_files:
+                        all_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                        total_size = sum(f.stat().st_size for f in all_files)
+                        
+                        print(f"📈 Statistics:")
+                        print(f"  Total Files: {len(all_files)}")
+                        print(f"  Total Size: {total_size / (1024*1024):.1f} MB")
+                        print(f"  Oldest: {datetime.fromtimestamp(all_files[-1].stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')}")
+                        print(f"  Newest: {datetime.fromtimestamp(all_files[0].stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')}")
+                        print()
+                        
+                        print("📋 Recent Files:")
+                        for i, file_path in enumerate(all_files[:5]):
+                            mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+                            size = file_path.stat().st_size
+                            print(f"  {i+1}. {file_path.name} ({size} bytes) - {mtime.strftime('%H:%M:%S')}")
+                    else:
+                        print("📋 No screenshots found")
+                
+                print("\n⏰ Next refresh in 5 seconds...")
+                time.sleep(5)
+                
+        except KeyboardInterrupt:
+            print("\n👋 Monitoring stopped")
+
     def cleanup_old_screenshots(self):
         """Clean up old screenshots based on age and count"""
         try:
@@ -530,10 +866,9 @@ class ScreenshotDaemon:
             cutoff_time = current_time - (self.config["keep_days"] * 24 * 60 * 60)
             
             deleted_count = 0
-            # Include all region patterns
+            # Include all patterns
             patterns = [f"{region_name}_*.png" for region_name in self.regions.keys()]
-            patterns.append("screenshot_*.png")  # Legacy pattern
-            patterns.append("web_*.png")  # Web screenshot pattern
+            patterns.extend(["screenshot_*.png", "web_*.png", "scheduled_*.png"])
             
             files = []
             for pattern in patterns:
@@ -558,235 +893,22 @@ class ScreenshotDaemon:
             
             if deleted_count > 0:
                 self.logger.info(f"Cleaned up {deleted_count} old screenshots")
-            
-            self.stats["last_cleanup"] = datetime.now()
+                self.stats["last_cleanup"] = datetime.now()
                 
         except Exception as e:
-            self.logger.warning(f"Failed to cleanup old screenshots: {e}")
-    
-    def health_check(self):
-        """Perform health checks"""
-        try:
-            # Check disk space
-            disk_usage = os.statvfs(self.output_dir)
-            free_space = disk_usage.f_frsize * disk_usage.f_bavail
-            free_space_mb = free_space / (1024 * 1024)
-            
-            if free_space_mb < 100:  # Less than 100MB
-                self.logger.warning(f"Low disk space: {free_space_mb:.1f} MB free")
-            
-            # Check if we can write files
-            test_file = self.output_dir / "health_check.tmp"
-            test_file.write_text("health check")
-            test_file.unlink()
-            
-            self.logger.debug("Health check passed")
-            
-        except Exception as e:
-            self.logger.error(f"Health check failed: {e}")
-    
-    def screenshot_loop(self):
-        """Main screenshot loop"""
-        self.logger.info("Screenshot daemon started")
-        self.stats["start_time"] = datetime.now()
-        
-        last_cleanup = 0
-        last_health_check = 0
-        last_web_screenshot = 0
-        
-        while self.running:
-            try:
-                current_time = time.time()
-                
-                # Take regular screenshots
-                self.take_screenshot()
-                
-                # Take web screenshots if interval has passed
-                web_config = self.config.get("web_screenshots", {})
-                if (web_config.get("enabled", False) and 
-                    current_time - last_web_screenshot > web_config.get("interval", 300)):
-                    self.take_web_screenshots()
-                    last_web_screenshot = current_time
-                
-                # Periodic cleanup
-                if (self.config["enable_cleanup"] and 
-                    current_time - last_cleanup > self.config["cleanup_interval"]):
-                    self.cleanup_old_screenshots()
-                    last_cleanup = current_time
-                
-                # Health check
-                if current_time - last_health_check > self.config["health_check_interval"]:
-                    self.health_check()
-                    last_health_check = current_time
-                
-                # Wait for next interval
-                time.sleep(self.interval)
-                
-            except Exception as e:
-                self.logger.error(f"Error in screenshot loop: {e}")
-                time.sleep(10)  # Wait before retry
-        
-        self.logger.info("Screenshot daemon stopped")
-    
-    def start(self):
-        """Start the daemon"""
-        if self.running:
-            self.logger.warning("Daemon is already running")
-            return
-        
-        # Check if running in headless environment
-        if not os.environ.get('DISPLAY'):
-            self.logger.warning("No DISPLAY environment variable found. Make sure to run with xvfb-run.")
-        
-        self.running = True
-        self.thread = threading.Thread(target=self.screenshot_loop)
-        self.thread.daemon = True
-        self.thread.start()
-        
-        # Send startup message to Telegram
-        if self.telegram_bot:
-            self.telegram_bot.send_startup_message()
-        
-        try:
-            # Keep main thread alive
-            while self.running:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            self.stop()
-    
-    def stop(self):
-        """Stop the daemon"""
-        if not self.running:
-            return
-        
-        # Send shutdown message to Telegram
-        if self.telegram_bot:
-            self.telegram_bot.send_shutdown_message()
-        
-        self.running = False
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=5)
-        
-        self.remove_pid_file()
-        self.logger.info("Screenshot daemon stopped")
-    
-    def get_status(self):
-        """Get daemon status"""
-        uptime = None
-        if self.stats["start_time"]:
-            uptime = str(datetime.now() - self.stats["start_time"])
-        
-        return {
-            "running": self.running,
-            "output_dir": str(self.output_dir),
-            "interval": self.interval,
-            "regions": self.regions,
-            "active_regions": self.active_regions,
-            "uptime": uptime,
-            "stats": self.stats,
-            "config": self.config
-        }
-    
-    def monitor_mode(self):
-        """Interactive monitoring mode"""
-        print("Screenshot Daemon Monitor")
-        print("=" * 30)
-        print("Press Ctrl+C to exit")
-        
-        try:
-            while True:
-                os.system('clear' if os.name == 'posix' else 'cls')
-                
-                status = self.get_status()
-                print(f"Status: {'🟢 Running' if status['running'] else '🔴 Stopped'}")
-                print(f"Output Directory: {status['output_dir']}")
-                print(f"Screenshot Interval: {status['interval']} seconds")
-                print(f"Active Regions: {', '.join(status['active_regions'])}")
-                
-                if status['uptime']:
-                    print(f"Uptime: {status['uptime']}")
-                
-                print(f"\nRegions Configuration:")
-                for region_name, region_coords in status['regions'].items():
-                    active = "✅" if region_name in status['active_regions'] else "⭕"
-                    print(f"  {active} {region_name}: {region_coords}")
-                
-                print(f"\nStatistics:")
-                print(f"  Total Screenshots: {status['stats']['total_screenshots']}")
-                print(f"  Failed Screenshots: {status['stats']['failed_screenshots']}")
-                print(f"  Telegram Sent: {status['stats']['telegram_sent']}")
-                print(f"  Telegram Failed: {status['stats']['telegram_failed']}")
-                
-                if status['stats']['last_screenshot']:
-                    print(f"  Last Screenshot: {status['stats']['last_screenshot']}")
-                
-                if status['stats']['last_cleanup']:
-                    print(f"  Last Cleanup: {status['stats']['last_cleanup']}")
-                
-                # Show Telegram status
-                if self.telegram_bot:
-                    print(f"\n📱 Telegram Status:")
-                    print(f"  Bot Token: {'✅ Configured' if self.config['telegram']['bot_token'] != 'YOUR_BOT_TOKEN' else '❌ Not configured'}")
-                    print(f"  Auto Send: {'✅ Enabled' if self.config['telegram']['send_immediately'] else '❌ Disabled'}")
-                    print(f"  Delete After Send: {'✅ Enabled' if self.config['telegram']['delete_after_send'] else '❌ Disabled'}")
-                    print(f"  Configured Chats: {len(self.config['telegram']['region_chats'])}")
-                
-                # Show recent files
-                patterns = [f"{region_name}_*.png" for region_name in status['regions'].keys()]
-                patterns.append("screenshot_*.png")
-                
-                recent_files = []
-                for pattern in patterns:
-                    recent_files.extend(self.output_dir.glob(pattern))
-                
-                recent_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                
-                print(f"\nRecent Files ({len(recent_files)} total):")
-                for i, file in enumerate(recent_files[:10]):  # Show more files
-                    mtime = datetime.fromtimestamp(file.stat().st_mtime)
-                    size = file.stat().st_size
-                    print(f"  {i+1}. {file.name} ({size} bytes) - {mtime}")
-                
-                time.sleep(5)
-                
-        except KeyboardInterrupt:
-            print("\nMonitoring stopped")
+            self.logger.error(f"Error during cleanup: {e}")
 
 # Keep the original ScreenshotManager for backward compatibility
 class ScreenshotManager:
-    def __init__(self, output_dir, regions=None, active_regions=None):
+    def __init__(self, output_dir, regions, active_regions):
         self.output_dir = Path(output_dir)
-        self.regions = regions or {"screenshot": (100, 100, 800, 600)}
-        self.active_regions = active_regions or ["screenshot"]
-        self.setup_logging()
-        self.ensure_output_directory()
-    
-    def setup_logging(self):
-        """Setup logging configuration"""
-        # Ensure output directory exists for log file
+        self.regions = regions
+        self.active_regions = active_regions
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        log_file = self.output_dir / "screenshot.log"
-        
-        # Configure logging
-        logging.basicConfig(
-            level=getattr(logging, CONFIG["log_level"]),
-            format="%(asctime)s [%(levelname)s] %(message)s",
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
+        # Setup logging
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
         self.logger = logging.getLogger(__name__)
-    
-    def ensure_output_directory(self):
-        """Ensure the output directory exists"""
-        try:
-            self.output_dir.mkdir(parents=True, exist_ok=True)
-            self.logger.info(f"Output directory ready: {self.output_dir}")
-        except Exception as e:
-            self.logger.error(f"Failed to create output directory {self.output_dir}: {e}")
-            sys.exit(1)
     
     def generate_filename(self, region_name="screenshot"):
         """Generate timestamped filename"""
@@ -1010,366 +1132,3 @@ class WebScreenshot:
                 self.logger.error(f"Error stopping WebDriver: {e}")
             finally:
                 self.driver = None
-    
-    def take_screenshot(self, url, output_path, wait_time=3, element_selector=None):
-        """Take screenshot of a web page (viewport only, not full page)"""
-        if not self.driver:
-            self.logger.error("WebDriver not initialized")
-            return False
-        
-        try:
-            # Navigate to URL
-            self.logger.info(f"🌐 Navigating to: {url}")
-            self.driver.get(url)
-            
-            # Wait for page to load
-            time.sleep(wait_time)
-            
-            # Wait for specific element if provided
-            if element_selector:
-                try:
-                    WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, element_selector))
-                    )
-                except Exception as e:
-                    self.logger.warning(f"Element selector timeout: {e}")
-            
-            # Set viewport size to ensure consistent screenshot size
-            self.driver.set_window_size(*self.window_size)
-            
-            # Take screenshot (viewport only, not full page)
-            if self.driver.save_screenshot(output_path):
-                self.logger.info(f"📸 Web screenshot saved (viewport): {output_path}")
-                
-                # Log screenshot dimensions for monitoring
-                try:
-                    from PIL import Image
-                    with Image.open(output_path) as img:
-                        self.logger.info(f"Screenshot size: {img.size[0]}x{img.size[1]} pixels")
-                except Exception as e:
-                    self.logger.debug(f"Could not get image dimensions: {e}")
-                
-                return True
-            else:
-                self.logger.error(f"❌ Failed to save screenshot: {output_path}")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"❌ Error taking web screenshot: {e}")
-            return False
-    
-    def take_element_screenshot(self, url, element_selector, output_path, wait_time=3):
-        """Take screenshot of a specific element"""
-        if not self.driver:
-            self.logger.error("WebDriver not initialized")
-            return False
-        
-        try:
-            # Navigate to URL
-            self.logger.info(f"🌐 Navigating to: {url}")
-            self.driver.get(url)
-            
-            # Wait for page to load
-            time.sleep(wait_time)
-            
-            # Find element
-            element = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, element_selector))
-            )
-            
-            # Take screenshot of element
-            if element.screenshot(output_path):
-                self.logger.info(f"📸 Element screenshot saved: {output_path}")
-                return True
-            else:
-                self.logger.error(f"❌ Failed to save element screenshot: {output_path}")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"❌ Error taking element screenshot: {e}")
-            return False
-
-def main():
-    """Main function with command line arguments"""
-    parser = argparse.ArgumentParser(description='Screenshot Monitoring Daemon')
-    parser.add_argument('command', nargs='?', choices=['start', 'stop', 'status', 'monitor', 'single', 'config', 'regions', 'telegram', 'web-test'],
-                       help='Command to execute')
-    parser.add_argument('--config', '-c', help='Configuration file path')
-    parser.add_argument('--interval', '-i', type=int, help='Screenshot interval in seconds')
-    parser.add_argument('--regions', '-r', help='Active regions (comma-separated)')
-    parser.add_argument('--output', '-o', help='Output directory')
-    parser.add_argument('--add-region', help='Add custom region as "name:x,y,width,height"')
-    parser.add_argument('--bot-token', help='Telegram bot token')
-    parser.add_argument('--test-telegram', action='store_true', help='Test Telegram bot connection')
-    parser.add_argument('--delete-after-send', action='store_true', help='Delete screenshots after successful Telegram send')
-    parser.add_argument('--keep-after-send', action='store_true', help='Keep screenshots after Telegram send')
-    parser.add_argument('--web-url', help='URL for web screenshot test (used with web-test command)')
-    parser.add_argument('--web-screenshot', help='Take screenshot of specified URL (shorthand for web-test --web-url)')
-    parser.add_argument('url', nargs='?', help='URL for web screenshot (positional argument)')
-    
-    args = parser.parse_args()
-    
-    # Handle --web-screenshot shorthand
-    if args.web_screenshot and not args.command:
-        args.command = 'web-test'
-        args.web_url = args.web_screenshot
-    
-    # Override config with command line arguments
-    config = CONFIG.copy()
-    if args.interval:
-        config["interval"] = args.interval
-    if args.regions:
-        config["active_regions"] = [r.strip() for r in args.regions.split(',')]
-    if args.output:
-        config["output_dir"] = args.output
-    if args.add_region:
-        try:
-            name, coords = args.add_region.split(':')
-            x, y, w, h = map(int, coords.split(','))
-            config["regions"][name] = (x, y, w, h)
-            if name not in config["active_regions"]:
-                config["active_regions"].append(name)
-        except ValueError:
-            print("Error: Invalid region format. Use 'name:x,y,width,height'")
-            sys.exit(1)
-    if args.bot_token:
-        config["telegram"]["bot_token"] = args.bot_token
-        config["telegram"]["enabled"] = True
-    if args.delete_after_send:
-        config["telegram"]["delete_after_send"] = True
-    if args.keep_after_send:
-        config["telegram"]["delete_after_send"] = False
-    
-    # Commands
-    if args.command == 'start':
-        daemon = ScreenshotDaemon(config)
-        daemon.start()
-    
-    elif args.command == 'stop':
-        if os.path.exists(PID_FILE):
-            with open(PID_FILE, 'r') as f:
-                pid = int(f.read().strip())
-            try:
-                os.kill(pid, signal.SIGTERM)
-                print(f"Stopped daemon with PID {pid}")
-            except ProcessLookupError:
-                print("Daemon is not running")
-                os.unlink(PID_FILE)
-        else:
-            print("Daemon is not running (no PID file)")
-    
-    elif args.command == 'status':
-        if os.path.exists(PID_FILE):
-            with open(PID_FILE, 'r') as f:
-                pid = int(f.read().strip())
-            try:
-                os.kill(pid, 0)  # Test if process exists
-                print(f"✅ Daemon is running (PID: {pid})")
-                
-                # Show recent files
-                output_dir = Path(config["output_dir"])
-                if output_dir.exists():
-                    patterns = [f"{region_name}_*.png" for region_name in config["regions"].keys()]
-                    patterns.append("screenshot_*.png")
-                    
-                    recent_files = []
-                    for pattern in patterns:
-                        recent_files.extend(output_dir.glob(pattern))
-                    
-                    recent_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-                    
-                    print(f"📁 Output directory: {output_dir}")
-                    print(f"🎯 Active regions: {', '.join(config['active_regions'])}")
-                    print(f"📸 Total screenshots: {len(recent_files)}")
-                    
-                    if recent_files:
-                        latest = recent_files[0]
-                        mtime = datetime.fromtimestamp(latest.stat().st_mtime)
-                        print(f"🕐 Last screenshot: {mtime} ({latest.name})")
-                
-            except ProcessLookupError:
-                print("❌ Daemon is not running (stale PID file)")
-                os.unlink(PID_FILE)
-        else:
-            print("❌ Daemon is not running")
-    
-    elif args.command == 'monitor':
-        daemon = ScreenshotDaemon(config)
-        daemon.monitor_mode()
-    
-    elif args.command == 'single':
-        # Single screenshot (backward compatibility)
-        if not os.environ.get('DISPLAY'):
-            print("Warning: No DISPLAY environment variable found. Make sure to run with xvfb-run.")
-        
-        screenshot_manager = ScreenshotManager(
-            config["output_dir"], 
-            config["regions"], 
-            config["active_regions"]
-        )
-        screenshot_manager.take_screenshot()
-        screenshot_manager.cleanup_old_screenshots(keep_days=7)
-    
-    elif args.command == 'config':
-        print(json.dumps(config, indent=2))
-    
-    elif args.command == 'regions':
-        print("📍 Available Regions:")
-        print("=" * 50)
-        for region_name, coords in config["regions"].items():
-            active = "✅ ACTIVE" if region_name in config["active_regions"] else "⭕ INACTIVE"
-            print(f"{active} - {region_name}: {coords}")
-        print()
-        print("💡 Usage examples:")
-        print(f"  Activate regions: python3 {sys.argv[0]} start --regions 'top_left,center'")
-        print(f"  Add custom region: python3 {sys.argv[0]} start --add-region 'my_region:0,0,500,300'")
-        print(f"  Single screenshot: python3 {sys.argv[0]} single --regions 'full_screen'")
-    
-    elif args.command == 'telegram':
-        print("📱 Telegram Configuration:")
-        print("=" * 50)
-        
-        telegram_config = config["telegram"]
-        
-        print(f"Enabled: {'✅ Yes' if telegram_config['enabled'] else '❌ No'}")
-        print(f"Bot Token: {'✅ Configured' if telegram_config['bot_token'] != 'YOUR_BOT_TOKEN' else '❌ Not configured'}")
-        print(f"Send Immediately: {'✅ Yes' if telegram_config['send_immediately'] else '❌ No'}")
-        print(f"Delete After Send: {'✅ Yes' if telegram_config['delete_after_send'] else '❌ No'}")
-        print(f"Retry Attempts: {telegram_config['retry_attempts']}")
-        print(f"Retry Delay: {telegram_config['retry_delay']} seconds")
-        
-        print(f"\n📍 Region Chat Mapping:")
-        for region_name, chat_id in telegram_config["region_chats"].items():
-            active = "✅" if region_name in config["active_regions"] else "⭕"
-            print(f"  {active} {region_name} → {chat_id}")
-        
-        print(f"\n📝 Message Template:")
-        print(f"  {telegram_config['message_template']}")
-        
-        # Test connection if requested
-        if args.test_telegram and telegram_config["bot_token"] != "YOUR_BOT_TOKEN":
-            print(f"\n🔍 Testing Telegram connection...")
-            bot = TelegramBot(
-                telegram_config["bot_token"],
-                telegram_config["region_chats"],
-                telegram_config["message_template"]
-            )
-            if bot.test_connection():
-                print("✅ Telegram bot connection successful!")
-            else:
-                print("❌ Telegram bot connection failed!")
-        
-        print(f"\n💡 Setup Instructions:")
-        print("1. Create a Telegram bot: https://t.me/BotFather")
-        print("2. Get your bot token")
-        print("3. Add bot to your groups")
-        print("4. Get group chat IDs (use @userinfobot)")
-        print("5. Update the configuration:")
-        print(f"   python3 {sys.argv[0]} start --bot-token YOUR_BOT_TOKEN")
-        print(f"6. Test connection:")
-        print(f"   python3 {sys.argv[0]} telegram --test-telegram")
-    
-    elif args.command == 'web-test':
-        """Test web screenshot functionality"""
-        web_config = config.get("web_screenshots", {})
-        
-        # Handle --web-screenshot shorthand
-        if args.web_screenshot:
-            test_url = args.web_screenshot
-        elif args.web_url:
-            test_url = args.web_url
-        elif args.url:
-            test_url = args.url
-        else:
-            test_url = None
-        
-        print("🌐 Web Screenshot Test")
-        print("=" * 25)
-        
-        # Setup logging
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-        
-        # Initialize web handler
-        web_handler = WebScreenshot(
-            browser=web_config.get("browser", "firefox"),
-            headless=web_config.get("headless", True),
-            window_size=web_config.get("window_size", [1920, 1080])
-        )
-        
-        if not web_handler.start_driver():
-            print("❌ Failed to start web driver")
-            sys.exit(1)
-        
-        try:
-            output_dir = Path(config["output_dir"])
-            output_dir.mkdir(exist_ok=True)
-            
-            # If a specific URL is provided, test that URL
-            if test_url:
-                print(f"🎯 Testing URL: {test_url}")
-                
-                # Generate test filename
-                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                filename = f"web_test_{timestamp}.png"
-                filepath = output_dir / filename
-                
-                # Take screenshot
-                success = web_handler.take_screenshot(
-                    url=test_url,
-                    output_path=str(filepath),
-                    wait_time=3,
-                    element_selector=None
-                )
-                
-                if success:
-                    file_size = filepath.stat().st_size
-                    print(f"   ✅ Screenshot saved: {filename} ({file_size} bytes)")
-                    return
-                else:
-                    print(f"   ❌ Failed to take screenshot")
-                    return
-            
-            # Otherwise test configured URLs
-            active_urls = web_config.get("active_urls", [])
-            if not active_urls:
-                print("❌ No active URLs configured and no URL specified")
-                print("💡 Usage: python3 screenshot_cron.py web-test --web-url https://www.google.com")
-                sys.exit(1)
-            
-            print(f"🎯 Testing {len(active_urls)} configured URL(s)...")
-            
-            for url_name in active_urls:
-                if url_name not in web_config["urls"]:
-                    print(f"❌ Unknown URL config: {url_name}")
-                    continue
-                
-                url_config = web_config["urls"][url_name]
-                
-                print(f"\n🔍 Testing: {url_name}")
-                print(f"   URL: {url_config['url']}")
-                
-                # Generate test filename
-                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                filename = f"web_test_{url_name}_{timestamp}.png"
-                filepath = output_dir / filename
-                
-                # Take screenshot
-                success = web_handler.take_screenshot(
-                    url=url_config["url"],
-                    output_path=str(filepath),
-                    wait_time=url_config["wait_time"],
-                    element_selector=url_config.get("element_selector")
-                )
-                
-                if success:
-                    file_size = filepath.stat().st_size
-                    print(f"   ✅ Screenshot saved: {filename} ({file_size} bytes)")
-                else:
-                    print(f"   ❌ Failed to take screenshot")
-        
-        finally:
-            web_handler.stop_driver()
-            print(f"\n🎉 Web screenshot test completed!")
-
-if __name__ == "__main__":
-    main()
