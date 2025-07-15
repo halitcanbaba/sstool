@@ -1049,7 +1049,7 @@ class WebScreenshot:
 def main():
     """Main function with command line arguments"""
     parser = argparse.ArgumentParser(description='Screenshot Monitoring Daemon')
-    parser.add_argument('command', choices=['start', 'stop', 'status', 'monitor', 'single', 'config', 'regions', 'telegram', 'web-test'],
+    parser.add_argument('command', nargs='?', choices=['start', 'stop', 'status', 'monitor', 'single', 'config', 'regions', 'telegram', 'web-test'],
                        help='Command to execute')
     parser.add_argument('--config', '-c', help='Configuration file path')
     parser.add_argument('--interval', '-i', type=int, help='Screenshot interval in seconds')
@@ -1067,7 +1067,7 @@ def main():
     args = parser.parse_args()
     
     # Handle --web-screenshot shorthand
-    if args.web_screenshot:
+    if args.web_screenshot and not args.command:
         args.command = 'web-test'
         args.web_url = args.web_screenshot
     
