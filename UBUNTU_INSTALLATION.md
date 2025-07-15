@@ -1,6 +1,26 @@
 # Ubuntu Server Installation Guide
 
-Bu rehber, screenshot daemon'unu Ubuntu/Debian sunucusunda çalıştırmak için gerekli tüm bağımlılıkları kurmak için terminal komutlarını içerir.
+Bu rehber, screenshot daemon'unu Ubuntu/Debian sunucusunda çalıştırmak için gerekli tüm bağımlılıkları kurm# Test Komutları
+
+```bash
+# Xvfb ile test screenshot
+xvfb-run -a python3 screenshot_cron.py single
+
+# Web screenshot test (Chromium ile)
+xvfb-run -a python3 screenshot_cron.py web-test
+
+# Servis durumunu kontrol et
+sudo systemctl status screenshot-daemon
+
+# Log dosyalarını kontrol et
+sudo journalctl -u screenshot-daemon -f
+
+# Manuel test
+xvfb-run -a -s "-screen 0 1920x1080x24" python3 screenshot_cron.py single
+
+# Web screenshot dosyalarını kontrol et
+find /var/screenshots/ -name "web_*.png" -type f
+```l komutlarını içerir.
 
 ## 1. Sistem Güncellemesi
 
@@ -59,6 +79,9 @@ sudo apt install -y firefox
 
 # Chromium (Firefox alternatifi)
 sudo apt install -y chromium-browser
+
+# ChromeDriver (Chromium için WebDriver)
+sudo apt install -y chromium-chromedriver
 
 # XDG Utils (Firefox için)
 sudo apt install -y xdg-utils
@@ -185,8 +208,12 @@ sudo apt install -y libjpeg-dev libpng-dev libtiff-dev libfreetype6-dev
 echo "🔧 Installing additional packages..."
 sudo apt install -y python3-tk scrot fonts-liberation fonts-dejavu-core
 
-# 6. Firefox ve GeckoDriver
-echo "🦊 Installing Firefox and GeckoDriver..."
+# 6. Chromium ve ChromeDriver (Önerilen)
+echo "🦊 Installing Chromium and ChromeDriver..."
+sudo apt install -y chromium-browser chromium-chromedriver
+
+# 7. Firefox ve GeckoDriver (Alternatif)
+echo "🌐 Installing Firefox and GeckoDriver (backup)..."
 sudo apt install -y firefox
 wget -q -O /tmp/geckodriver.tar.gz https://github.com/mozilla/geckodriver/releases/download/v0.33.0/geckodriver-v0.33.0-linux64.tar.gz
 sudo tar -xzf /tmp/geckodriver.tar.gz -C /usr/local/bin/
@@ -203,9 +230,10 @@ echo "📚 Installing Python packages..."
 pip install --upgrade pip
 pip install pyautogui Pillow requests
 
-# 9. Test
+# 9. Test - Web screenshot da dahil
 echo "✅ Testing installation..."
 xvfb-run -a python3 screenshot_cron.py single --regions full_screen
+xvfb-run -a python3 screenshot_cron.py web-test
 
 echo "🎉 Installation completed!"
 echo "💡 Usage: xvfb-run -a python3 screenshot_cron.py start"

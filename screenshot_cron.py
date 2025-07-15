@@ -895,6 +895,14 @@ class WebScreenshot:
             options.add_argument('--disable-plugins')
             options.add_argument('--disable-images')  # Faster loading
             
+            # Set viewport size for consistent screenshots
+            options.set_preference('browser.window.width', self.window_size[0])
+            options.set_preference('browser.window.height', self.window_size[1])
+            
+            # Disable full-page screenshot to get viewport-only
+            options.set_preference('dom.webdriver.enabled', False)
+            options.set_preference('useAutomationExtension', False)
+            
             # Try to find system geckodriver
             try:
                 # Check if geckodriver is in PATH
@@ -938,6 +946,15 @@ class WebScreenshot:
             options.add_argument('--disable-extensions')
             options.add_argument('--disable-plugins')
             options.add_argument('--disable-images')  # Faster loading
+            options.add_argument('--disable-web-security')
+            options.add_argument('--disable-features=VizDisplayCompositor')
+            
+            # Set viewport size for consistent screenshots
+            options.add_argument(f'--window-size={self.window_size[0]},{self.window_size[1]}')
+            
+            # Disable full-page screenshot to get viewport-only
+            options.add_experimental_option('useAutomationExtension', False)
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
             
             # Try to find system chromedriver
             try:
@@ -995,7 +1012,7 @@ class WebScreenshot:
                 self.driver = None
     
     def take_screenshot(self, url, output_path, wait_time=3, element_selector=None):
-        """Take screenshot of a web page"""
+        """Take screenshot of a web page (viewport only, not full page)"""
         if not self.driver:
             self.logger.error("WebDriver not initialized")
             return False
@@ -1017,9 +1034,21 @@ class WebScreenshot:
                 except Exception as e:
                     self.logger.warning(f"Element selector timeout: {e}")
             
-            # Take screenshot
+            # Set viewport size to ensure consistent screenshot size
+            self.driver.set_window_size(*self.window_size)
+            
+            # Take screenshot (viewport only, not full page)
             if self.driver.save_screenshot(output_path):
-                self.logger.info(f"📸 Web screenshot saved: {output_path}")
+                self.logger.info(f"📸 Web screenshot saved (viewport): {output_path}")
+                
+                # Log screenshot dimensions for monitoring
+                try:
+                    from PIL import Image
+                    with Image.open(output_path) as img:
+                        self.logger.info(f"Screenshot size: {img.size[0]}x{img.size[1]} pixels")
+                except Exception as e:
+                    self.logger.debug(f"Could not get image dimensions: {e}")
+                
                 return True
             else:
                 self.logger.error(f"❌ Failed to save screenshot: {output_path}")
