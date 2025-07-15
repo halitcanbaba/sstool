@@ -57,8 +57,11 @@ sudo apt install -y libopencv-dev python3-opencv
 # Firefox (web screenshot için)
 sudo apt install -y firefox
 
-# GeckoDriver (Firefox için WebDriver)
-sudo apt install -y firefox-geckodriver
+# GeckoDriver (Firefox için WebDriver) - Manuel kurulum
+wget -q -O /tmp/geckodriver.tar.gz https://github.com/mozilla/geckodriver/releases/download/v0.33.0/geckodriver-v0.33.0-linux64.tar.gz
+sudo tar -xzf /tmp/geckodriver.tar.gz -C /usr/local/bin/
+sudo chmod +x /usr/local/bin/geckodriver
+rm /tmp/geckodriver.tar.gz
 
 # gnome-screenshot (pyautogui için)
 sudo apt install -y gnome-screenshot
@@ -176,17 +179,25 @@ sudo apt install -y libjpeg-dev libpng-dev libtiff-dev libfreetype6-dev
 echo "🔧 Installing additional packages..."
 sudo apt install -y python3-tk scrot fonts-liberation fonts-dejavu-core
 
-# 6. Python sanal ortam
+# 6. Firefox ve GeckoDriver
+echo "🦊 Installing Firefox and GeckoDriver..."
+sudo apt install -y firefox
+wget -q -O /tmp/geckodriver.tar.gz https://github.com/mozilla/geckodriver/releases/download/v0.33.0/geckodriver-v0.33.0-linux64.tar.gz
+sudo tar -xzf /tmp/geckodriver.tar.gz -C /usr/local/bin/
+sudo chmod +x /usr/local/bin/geckodriver
+rm /tmp/geckodriver.tar.gz
+
+# 7. Python sanal ortam
 echo "🌐 Creating virtual environment..."
 python3 -m venv venv
 source venv/bin/activate
 
-# 7. Python paketleri
+# 8. Python paketleri
 echo "📚 Installing Python packages..."
 pip install --upgrade pip
 pip install pyautogui Pillow requests
 
-# 8. Test
+# 9. Test
 echo "✅ Testing installation..."
 xvfb-run -a python3 screenshot_cron.py single --regions full_screen
 
