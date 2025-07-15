@@ -57,6 +57,12 @@ sudo apt install -y libopencv-dev python3-opencv
 # Firefox (web screenshot için)
 sudo apt install -y firefox
 
+# Chromium (Firefox alternatifi)
+sudo apt install -y chromium-browser
+
+# XDG Utils (Firefox için)
+sudo apt install -y xdg-utils
+
 # GeckoDriver (Firefox için WebDriver) - Manuel kurulum
 wget -q -O /tmp/geckodriver.tar.gz https://github.com/mozilla/geckodriver/releases/download/v0.33.0/geckodriver-v0.33.0-linux64.tar.gz
 sudo tar -xzf /tmp/geckodriver.tar.gz -C /usr/local/bin/

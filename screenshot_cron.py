@@ -43,8 +43,6 @@ try:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
-    from webdriver_manager.chrome import ChromeDriverManager
-    from webdriver_manager.firefox import GeckoDriverManager
     from selenium.webdriver.chrome.service import Service as ChromeService
     from selenium.webdriver.firefox.service import Service as FirefoxService
     
@@ -82,7 +80,7 @@ CONFIG = {
     "cleanup_interval": 3600,  # 1 hour
     "web_screenshots": {
         "enabled": True,
-        "browser": "firefox",  # 'firefox' or 'chrome'
+        "browser": "chrome",  # 'firefox' or 'chrome'
         "headless": True,
         "window_size": (1920, 1080),
         "urls": {
@@ -879,22 +877,11 @@ class WebScreenshot:
         self.window_size = window_size
         self.driver = None
         self.logger = logging.getLogger(__name__)
-        
-        # Set custom cache directory for WebDriver Manager
-        self.cache_dir = "/tmp/webdriver_cache"
-        os.makedirs(self.cache_dir, exist_ok=True)
-        os.environ['WDM_LOCAL'] = self.cache_dir
-        self.logger = logging.getLogger(__name__)
     
     def _setup_firefox_driver(self):
         """Setup Firefox WebDriver with headless options"""
         try:
             from selenium.webdriver.firefox.service import Service as FirefoxService
-            from webdriver_manager.firefox import GeckoDriverManager
-            
-            # Set environment variables for WebDriver Manager
-            os.environ['WDM_LOCAL'] = self.cache_dir
-            os.environ['WDM_LOG_LEVEL'] = '0'
             
             options = FirefoxOptions()
             if self.headless:
@@ -908,42 +895,28 @@ class WebScreenshot:
             options.add_argument('--disable-plugins')
             options.add_argument('--disable-images')  # Faster loading
             
-            # Install and setup Firefox driver with simple approach
+            # Try to find system geckodriver
             try:
-                # Set proper environment for webdriver-manager
-                os.environ['WDM_LOG_LEVEL'] = '0'
-                os.environ['HOME'] = '/home/screenshot'
-                
-                # Try basic GeckoDriverManager first
-                driver_manager = GeckoDriverManager()
-                driver_path = driver_manager.install()
-                service = FirefoxService(driver_path)
-                
-                return webdriver.Firefox(service=service, options=options)
-                
-            except Exception as manager_error:
-                self.logger.error(f"GeckoDriverManager error: {manager_error}")
-                
-                # Fallback: try without custom service
-                try:
-                    return webdriver.Firefox(options=options)
-                except Exception as fallback_error:
-                    self.logger.error(f"Firefox fallback error: {fallback_error}")
-                    
-                    # Final fallback: try to find system geckodriver
-                    try:
-                        # Check if geckodriver is in PATH
-                        import subprocess
-                        result = subprocess.run(['which', 'geckodriver'], 
-                                              capture_output=True, text=True)
-                        if result.returncode == 0:
-                            geckodriver_path = result.stdout.strip()
-                            service = FirefoxService(geckodriver_path)
-                            return webdriver.Firefox(service=service, options=options)
-                    except Exception:
-                        pass
-                    
-                    return None
+                # Check if geckodriver is in PATH
+                import subprocess
+                result = subprocess.run(['which', 'geckodriver'], 
+                                      capture_output=True, text=True)
+                if result.returncode == 0:
+                    geckodriver_path = result.stdout.strip()
+                    service = FirefoxService(geckodriver_path)
+                    self.logger.info(f"Using system geckodriver: {geckodriver_path}")
+                    return webdriver.Firefox(service=service, options=options)
+                else:
+                    self.logger.info("geckodriver not found in PATH, trying default")
+            except Exception as e:
+                self.logger.warning(f"Error finding geckodriver: {e}")
+            
+            # Fallback: try without custom service
+            try:
+                return webdriver.Firefox(options=options)
+            except Exception as fallback_error:
+                self.logger.error(f"Firefox fallback error: {fallback_error}")
+                return None
             
         except Exception as e:
             self.logger.error(f"Failed to setup Firefox driver: {e}")
@@ -953,11 +926,6 @@ class WebScreenshot:
         """Setup Chrome WebDriver with headless options"""
         try:
             from selenium.webdriver.chrome.service import Service as ChromeService
-            from webdriver_manager.chrome import ChromeDriverManager
-            
-            # Set environment variables for WebDriver Manager
-            os.environ['WDM_LOCAL'] = self.cache_dir
-            os.environ['WDM_LOG_LEVEL'] = '0'
             
             options = ChromeOptions()
             if self.headless:
@@ -971,24 +939,28 @@ class WebScreenshot:
             options.add_argument('--disable-plugins')
             options.add_argument('--disable-images')  # Faster loading
             
-            # Install and setup Chrome driver with simple approach
+            # Try to find system chromedriver
             try:
-                # Try basic ChromeDriverManager first
-                driver_manager = ChromeDriverManager()
-                driver_path = driver_manager.install()
-                service = ChromeService(driver_path)
-                
-                return webdriver.Chrome(service=service, options=options)
-                
-            except Exception as manager_error:
-                self.logger.error(f"ChromeDriverManager error: {manager_error}")
-                
-                # Fallback: try without custom service
-                try:
-                    return webdriver.Chrome(options=options)
-                except Exception as fallback_error:
-                    self.logger.error(f"Chrome fallback error: {fallback_error}")
-                    return None
+                # Check if chromedriver is in PATH
+                import subprocess
+                result = subprocess.run(['which', 'chromedriver'], 
+                                      capture_output=True, text=True)
+                if result.returncode == 0:
+                    chromedriver_path = result.stdout.strip()
+                    service = ChromeService(chromedriver_path)
+                    self.logger.info(f"Using system chromedriver: {chromedriver_path}")
+                    return webdriver.Chrome(service=service, options=options)
+                else:
+                    self.logger.info("chromedriver not found in PATH, trying default")
+            except Exception as e:
+                self.logger.warning(f"Error finding chromedriver: {e}")
+            
+            # Fallback: try without custom service
+            try:
+                return webdriver.Chrome(options=options)
+            except Exception as fallback_error:
+                self.logger.error(f"Chrome fallback error: {fallback_error}")
+                return None
             
         except Exception as e:
             self.logger.error(f"Failed to setup Chrome driver: {e}")
