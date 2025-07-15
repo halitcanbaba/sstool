@@ -57,6 +57,9 @@ sudo apt install -y libopencv-dev python3-opencv
 # Firefox (web screenshot için)
 sudo apt install -y firefox
 
+# GeckoDriver (Firefox için WebDriver)
+sudo apt install -y firefox-geckodriver
+
 # gnome-screenshot (pyautogui için)
 sudo apt install -y gnome-screenshot
 ```
@@ -86,8 +89,8 @@ pip install -r requirements.txt
 # Veya manuel olarak:
 pip install pyautogui Pillow requests
 
-# Web screenshot için ek paketler
-pip install selenium webdriver-manager
+# Web screenshot için ek paketler (webdriver-manager opsiyonel)
+pip install selenium
 ```
 
 ## 7. Servis Kurulumu (Systemd)

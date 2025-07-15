@@ -908,18 +908,42 @@ class WebScreenshot:
             options.add_argument('--disable-plugins')
             options.add_argument('--disable-images')  # Faster loading
             
-            # Install and setup Firefox driver with custom cache directory
+            # Install and setup Firefox driver with simple approach
             try:
-                # Try with cache_valid_range first (older versions)
-                driver_manager = GeckoDriverManager(cache_valid_range=7, path=self.cache_dir)
-            except TypeError:
-                # Fall back to newer version without cache_valid_range
-                driver_manager = GeckoDriverManager(path=self.cache_dir)
-            
-            driver_path = driver_manager.install()
-            service = FirefoxService(driver_path)
-            
-            return webdriver.Firefox(service=service, options=options)
+                # Set proper environment for webdriver-manager
+                os.environ['WDM_LOG_LEVEL'] = '0'
+                os.environ['HOME'] = '/home/screenshot'
+                
+                # Try basic GeckoDriverManager first
+                driver_manager = GeckoDriverManager()
+                driver_path = driver_manager.install()
+                service = FirefoxService(driver_path)
+                
+                return webdriver.Firefox(service=service, options=options)
+                
+            except Exception as manager_error:
+                self.logger.error(f"GeckoDriverManager error: {manager_error}")
+                
+                # Fallback: try without custom service
+                try:
+                    return webdriver.Firefox(options=options)
+                except Exception as fallback_error:
+                    self.logger.error(f"Firefox fallback error: {fallback_error}")
+                    
+                    # Final fallback: try to find system geckodriver
+                    try:
+                        # Check if geckodriver is in PATH
+                        import subprocess
+                        result = subprocess.run(['which', 'geckodriver'], 
+                                              capture_output=True, text=True)
+                        if result.returncode == 0:
+                            geckodriver_path = result.stdout.strip()
+                            service = FirefoxService(geckodriver_path)
+                            return webdriver.Firefox(service=service, options=options)
+                    except Exception:
+                        pass
+                    
+                    return None
             
         except Exception as e:
             self.logger.error(f"Failed to setup Firefox driver: {e}")
@@ -947,18 +971,24 @@ class WebScreenshot:
             options.add_argument('--disable-plugins')
             options.add_argument('--disable-images')  # Faster loading
             
-            # Install and setup Chrome driver with custom cache directory
+            # Install and setup Chrome driver with simple approach
             try:
-                # Try with cache_valid_range first (older versions)
-                driver_manager = ChromeDriverManager(cache_valid_range=7, path=self.cache_dir)
-            except TypeError:
-                # Fall back to newer version without cache_valid_range
-                driver_manager = ChromeDriverManager(path=self.cache_dir)
-            
-            driver_path = driver_manager.install()
-            service = ChromeService(driver_path)
-            
-            return webdriver.Chrome(service=service, options=options)
+                # Try basic ChromeDriverManager first
+                driver_manager = ChromeDriverManager()
+                driver_path = driver_manager.install()
+                service = ChromeService(driver_path)
+                
+                return webdriver.Chrome(service=service, options=options)
+                
+            except Exception as manager_error:
+                self.logger.error(f"ChromeDriverManager error: {manager_error}")
+                
+                # Fallback: try without custom service
+                try:
+                    return webdriver.Chrome(options=options)
+                except Exception as fallback_error:
+                    self.logger.error(f"Chrome fallback error: {fallback_error}")
+                    return None
             
         except Exception as e:
             self.logger.error(f"Failed to setup Chrome driver: {e}")
