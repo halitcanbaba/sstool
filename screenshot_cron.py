@@ -892,6 +892,10 @@ class WebScreenshot:
             from selenium.webdriver.firefox.service import Service as FirefoxService
             from webdriver_manager.firefox import GeckoDriverManager
             
+            # Set environment variables for WebDriver Manager
+            os.environ['WDM_LOCAL'] = self.cache_dir
+            os.environ['WDM_LOG_LEVEL'] = '0'
+            
             options = FirefoxOptions()
             if self.headless:
                 options.add_argument('--headless')
@@ -904,8 +908,9 @@ class WebScreenshot:
             options.add_argument('--disable-plugins')
             options.add_argument('--disable-images')  # Faster loading
             
-            # Install and setup Firefox driver
-            driver_path = GeckoDriverManager().install()
+            # Install and setup Firefox driver with custom cache directory
+            driver_manager = GeckoDriverManager(cache_valid_range=7, path=self.cache_dir)
+            driver_path = driver_manager.install()
             service = FirefoxService(driver_path)
             
             return webdriver.Firefox(service=service, options=options)
@@ -920,6 +925,10 @@ class WebScreenshot:
             from selenium.webdriver.chrome.service import Service as ChromeService
             from webdriver_manager.chrome import ChromeDriverManager
             
+            # Set environment variables for WebDriver Manager
+            os.environ['WDM_LOCAL'] = self.cache_dir
+            os.environ['WDM_LOG_LEVEL'] = '0'
+            
             options = ChromeOptions()
             if self.headless:
                 options.add_argument('--headless')
@@ -932,8 +941,9 @@ class WebScreenshot:
             options.add_argument('--disable-plugins')
             options.add_argument('--disable-images')  # Faster loading
             
-            # Install and setup Chrome driver
-            driver_path = ChromeDriverManager().install()
+            # Install and setup Chrome driver with custom cache directory
+            driver_manager = ChromeDriverManager(cache_valid_range=7, path=self.cache_dir)
+            driver_path = driver_manager.install()
             service = ChromeService(driver_path)
             
             return webdriver.Chrome(service=service, options=options)
