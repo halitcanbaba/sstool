@@ -37,9 +37,19 @@ try:
     import pyautogui
     from PIL import Image
     import requests
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    from selenium.webdriver.firefox.options import Options as FirefoxOptions
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from webdriver_manager.chrome import ChromeDriverManager
+    from webdriver_manager.firefox import GeckoDriverManager
+    from selenium.webdriver.chrome.service import Service as ChromeService
+    from selenium.webdriver.firefox.service import Service as FirefoxService
 except ImportError as e:
     print(f"Error: Required library not installed: {e}")
-    print("Install with: pip3 install pyautogui Pillow requests")
+    print("Install with: pip3 install pyautogui Pillow requests selenium webdriver-manager")
     sys.exit(1)
 
 # Configuration
@@ -64,6 +74,35 @@ CONFIG = {
     "health_check_interval": 300,  # 5 minutes
     "enable_cleanup": True,
     "cleanup_interval": 3600,  # 1 hour
+    "web_screenshots": {
+        "enabled": True,
+        "browser": "firefox",  # 'firefox' or 'chrome'
+        "headless": True,
+        "window_size": (1920, 1080),
+        "urls": {
+            "google": {
+                "url": "https://www.google.com",
+                "wait_time": 3,
+                "element_selector": None,  # Wait for specific element
+                "telegram_chat_id": "-1002745524480"
+            },
+            "github": {
+                "url": "https://github.com",
+                "wait_time": 5,
+                "element_selector": ".Header",
+                "telegram_chat_id": "-1002745524480"
+            },
+            "stackoverflow": {
+                "url": "https://stackoverflow.com",
+                "wait_time": 3,
+                "element_selector": None,
+                "telegram_chat_id": "-1002745524480"
+            }
+        },
+        "active_urls": ["google"],  # Which URLs to capture
+        "interval": 300,  # 5 minutes between web screenshots
+        "delete_after_send": True
+    },
     "telegram": {
         "enabled": True,
         "bot_token": "7316358170:AAHKY7d37TclDcZg8b-d4CgfUjJ5HeI-QhQ",  # Replace with your bot token
@@ -363,6 +402,105 @@ class ScreenshotDaemon:
         
         return screenshots_taken > 0
     
+    def take_web_screenshots(self):
+        """Take screenshots of configured web pages"""
+        if not self.config["web_screenshots"]["enabled"]:
+            return
+        
+        web_config = self.config["web_screenshots"]
+        active_urls = web_config.get("active_urls", [])
+        
+        if not active_urls:
+            return
+        
+        # Initialize web screenshot handler
+        web_handler = WebScreenshot(
+            browser=web_config["browser"],
+            headless=web_config["headless"],
+            window_size=web_config["window_size"]
+        )
+        
+        if not web_handler.start_driver():
+            self.logger.error("Failed to start web driver")
+            return
+        
+        try:
+            for url_name in active_urls:
+                if url_name not in web_config["urls"]:
+                    self.logger.warning(f"Unknown URL config: {url_name}")
+                    continue
+                
+                url_config = web_config["urls"][url_name]
+                
+                try:
+                    # Generate filename for web screenshot
+                    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                    filename = f"web_{url_name}_{timestamp}.png"
+                    filepath = self.output_dir / filename
+                    
+                    # Take screenshot
+                    success = web_handler.take_screenshot(
+                        url=url_config["url"],
+                        output_path=str(filepath),
+                        wait_time=url_config["wait_time"],
+                        element_selector=url_config.get("element_selector")
+                    )
+                    
+                    if success:
+                        file_size = filepath.stat().st_size
+                        timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        self.logger.info(f"Web screenshot saved: {filename} ({file_size} bytes)")
+                        
+                        # Send to Telegram if enabled
+                        if self.telegram_bot and url_config.get("telegram_chat_id"):
+                            message = f"🌐 Web Screenshot: {url_name}\n📅 Time: {timestamp_str}\n🔗 URL: {url_config['url']}\n📏 Size: {file_size} bytes"
+                            
+                            try:
+                                # Send to specific chat
+                                url = f"https://api.telegram.org/bot{self.telegram_bot.bot_token}/sendPhoto"
+                                with open(filepath, 'rb') as photo:
+                                    data = {
+                                        'chat_id': url_config["telegram_chat_id"],
+                                        'caption': message,
+                                        'parse_mode': 'HTML'
+                                    }
+                                    files = {'photo': photo}
+                                    
+                                    response = requests.post(url, data=data, files=files, timeout=30)
+                                    
+                                    if response.status_code == 200:
+                                        self.logger.info(f"✅ Web screenshot sent to Telegram: {url_name}")
+                                        self.stats["telegram_sent"] += 1
+                                        
+                                        # Delete file after successful send if configured
+                                        if web_config["delete_after_send"]:
+                                            try:
+                                                filepath.unlink()
+                                                self.logger.info(f"🗑️ Web screenshot deleted after Telegram send: {filename}")
+                                            except Exception as e:
+                                                self.logger.warning(f"Failed to delete web screenshot: {e}")
+                                    else:
+                                        self.logger.error(f"❌ Failed to send web screenshot to Telegram: {response.status_code}")
+                                        self.stats["telegram_failed"] += 1
+                                        
+                            except Exception as e:
+                                self.logger.error(f"❌ Error sending web screenshot to Telegram: {e}")
+                                self.stats["telegram_failed"] += 1
+                        
+                        self.stats["total_screenshots"] += 1
+                        
+                    else:
+                        self.logger.error(f"Failed to take web screenshot: {url_name}")
+                        self.stats["failed_screenshots"] += 1
+                        
+                except Exception as e:
+                    self.logger.error(f"Error taking web screenshot for {url_name}: {e}")
+                    self.stats["failed_screenshots"] += 1
+        
+        finally:
+            web_handler.stop_driver()
+
     def cleanup_old_screenshots(self):
         """Clean up old screenshots based on age and count"""
         try:
@@ -372,7 +510,7 @@ class ScreenshotDaemon:
             deleted_count = 0
             # Include all region patterns
             patterns = [f"{region_name}_*.png" for region_name in self.regions.keys()]
-            patterns.append("screenshot_*.png")  # Legacy pattern
+            patterns.append("screenshot_*.png" # Legacy pattern
             
             files = []
             for pattern in patterns:
@@ -431,13 +569,21 @@ class ScreenshotDaemon:
         
         last_cleanup = 0
         last_health_check = 0
+        last_web_screenshot = 0
         
         while self.running:
             try:
                 current_time = time.time()
                 
-                # Take screenshot
+                # Take regular screenshots
                 self.take_screenshot()
+                
+                # Take web screenshots if interval has passed
+                web_config = self.config.get("web_screenshots", {})
+                if (web_config.get("enabled", False) and 
+                    current_time - last_web_screenshot > web_config.get("interval", 300)):
+                    self.take_web_screenshots()
+                    last_web_screenshot = current_time
                 
                 # Periodic cleanup
                 if (self.config["enable_cleanup"] and 
@@ -681,7 +827,7 @@ class ScreenshotManager:
             deleted_count = 0
             # Include all region patterns
             patterns = [f"{region_name}_*.png" for region_name in self.regions.keys()]
-            patterns.append("screenshot_*.png")  # Legacy pattern
+            patterns.append("screenshot_*.png" # Legacy pattern
             
             files = []
             for pattern in patterns:
@@ -698,10 +844,170 @@ class ScreenshotManager:
         except Exception as e:
             self.logger.warning(f"Failed to cleanup old screenshots: {e}")
 
+class WebScreenshot:
+    """Web screenshot handler using Selenium WebDriver"""
+    
+    def __init__(self, browser='firefox', headless=True, window_size=(1920, 1080)):
+        self.browser = browser.lower()
+        self.headless = headless
+        self.window_size = window_size
+        self.driver = None
+        self.logger = logging.getLogger(__name__)
+    
+    def _setup_firefox_driver(self):
+        """Setup Firefox WebDriver with headless options"""
+        try:
+            from selenium.webdriver.firefox.service import Service as FirefoxService
+            from webdriver_manager.firefox import GeckoDriverManager
+            
+            options = FirefoxOptions()
+            if self.headless:
+                options.add_argument('--headless')
+            
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
+            options.add_argument('--window-size={},{}'.format(*self.window_size))
+            options.add_argument('--disable-extensions')
+            options.add_argument('--disable-plugins')
+            options.add_argument('--disable-images')  # Faster loading
+            
+            # Install and setup Firefox driver
+            driver_path = GeckoDriverManager().install()
+            service = FirefoxService(driver_path)
+            
+            return webdriver.Firefox(service=service, options=options)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to setup Firefox driver: {e}")
+            return None
+    
+    def _setup_chrome_driver(self):
+        """Setup Chrome WebDriver with headless options"""
+        try:
+            from selenium.webdriver.chrome.service import Service as ChromeService
+            from webdriver_manager.chrome import ChromeDriverManager
+            
+            options = ChromeOptions()
+            if self.headless:
+                options.add_argument('--headless')
+            
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
+            options.add_argument('--window-size={},{}'.format(*self.window_size))
+            options.add_argument('--disable-extensions')
+            options.add_argument('--disable-plugins')
+            options.add_argument('--disable-images')  # Faster loading
+            
+            # Install and setup Chrome driver
+            driver_path = ChromeDriverManager().install()
+            service = ChromeService(driver_path)
+            
+            return webdriver.Chrome(service=service, options=options)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to setup Chrome driver: {e}")
+            return None
+    
+    def start_driver(self):
+        """Initialize WebDriver"""
+        if self.browser == 'firefox':
+            self.driver = self._setup_firefox_driver()
+        elif self.browser == 'chrome':
+            self.driver = self._setup_chrome_driver()
+        else:
+            self.logger.error(f"Unsupported browser: {self.browser}")
+            return False
+        
+        if self.driver:
+            self.logger.info(f"✅ {self.browser.title()} WebDriver started successfully")
+            return True
+        else:
+            self.logger.error(f"❌ Failed to start {self.browser} WebDriver")
+            return False
+    
+    def stop_driver(self):
+        """Stop WebDriver"""
+        if self.driver:
+            try:
+                self.driver.quit()
+                self.logger.info(f"✅ {self.browser.title()} WebDriver stopped")
+            except Exception as e:
+                self.logger.error(f"Error stopping WebDriver: {e}")
+            finally:
+                self.driver = None
+    
+    def take_screenshot(self, url, output_path, wait_time=3, element_selector=None):
+        """Take screenshot of a web page"""
+        if not self.driver:
+            self.logger.error("WebDriver not initialized")
+            return False
+        
+        try:
+            # Navigate to URL
+            self.logger.info(f"🌐 Navigating to: {url}")
+            self.driver.get(url)
+            
+            # Wait for page to load
+            time.sleep(wait_time)
+            
+            # Wait for specific element if provided
+            if element_selector:
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, element_selector))
+                    )
+                except Exception as e:
+                    self.logger.warning(f"Element selector timeout: {e}")
+            
+            # Take screenshot
+            if self.driver.save_screenshot(output_path):
+                self.logger.info(f"📸 Web screenshot saved: {output_path}")
+                return True
+            else:
+                self.logger.error(f"❌ Failed to save screenshot: {output_path}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error taking web screenshot: {e}")
+            return False
+    
+    def take_element_screenshot(self, url, element_selector, output_path, wait_time=3):
+        """Take screenshot of a specific element"""
+        if not self.driver:
+            self.logger.error("WebDriver not initialized")
+            return False
+        
+        try:
+            # Navigate to URL
+            self.logger.info(f"🌐 Navigating to: {url}")
+            self.driver.get(url)
+            
+            # Wait for page to load
+            time.sleep(wait_time)
+            
+            # Find element
+            element = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, element_selector))
+            )
+            
+            # Take screenshot of element
+            if element.screenshot(output_path):
+                self.logger.info(f"📸 Element screenshot saved: {output_path}")
+                return True
+            else:
+                self.logger.error(f"❌ Failed to save element screenshot: {output_path}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error taking element screenshot: {e}")
+            return False
+
 def main():
     """Main function with command line arguments"""
     parser = argparse.ArgumentParser(description='Screenshot Monitoring Daemon')
-    parser.add_argument('command', choices=['start', 'stop', 'status', 'monitor', 'single', 'config', 'regions', 'telegram'],
+    parser.add_argument('command', choices=['start', 'stop', 'status', 'monitor', 'single', 'config', 'regions', 'telegram', 'web-test'],
                        help='Command to execute')
     parser.add_argument('--config', '-c', help='Configuration file path')
     parser.add_argument('--interval', '-i', type=int, help='Screenshot interval in seconds')
@@ -869,6 +1175,75 @@ def main():
         print(f"   python3 {sys.argv[0]} start --bot-token YOUR_BOT_TOKEN")
         print(f"6. Test connection:")
         print(f"   python3 {sys.argv[0]} telegram --test-telegram")
+    
+    elif args.command == 'web-test':
+        """Test web screenshot functionality"""
+        web_config = config.get("web_screenshots", {})
+        
+        if not web_config.get("enabled", False):
+            print("❌ Web screenshots are disabled")
+            sys.exit(1)
+        
+        print("🌐 Web Screenshot Test")
+        print("=" * 25)
+        
+        # Setup logging
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        
+        # Initialize web handler
+        web_handler = WebScreenshot(
+            browser=web_config["browser"],
+            headless=web_config["headless"],
+            window_size=web_config["window_size"]
+        )
+        
+        if not web_handler.start_driver():
+            print("❌ Failed to start web driver")
+            sys.exit(1)
+        
+        try:
+            output_dir = Path(config["output_dir"])
+            output_dir.mkdir(exist_ok=True)
+            
+            active_urls = web_config.get("active_urls", [])
+            if not active_urls:
+                print("❌ No active URLs configured")
+                sys.exit(1)
+            
+            print(f"🎯 Testing {len(active_urls)} URL(s)...")
+            
+            for url_name in active_urls:
+                if url_name not in web_config["urls"]:
+                    print(f"❌ Unknown URL config: {url_name}")
+                    continue
+                
+                url_config = web_config["urls"][url_name]
+                
+                print(f"\n🔍 Testing: {url_name}")
+                print(f"   URL: {url_config['url']}")
+                
+                # Generate test filename
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                filename = f"web_test_{url_name}_{timestamp}.png"
+                filepath = output_dir / filename
+                
+                # Take screenshot
+                success = web_handler.take_screenshot(
+                    url=url_config["url"],
+                    output_path=str(filepath),
+                    wait_time=url_config["wait_time"],
+                    element_selector=url_config.get("element_selector")
+                )
+                
+                if success:
+                    file_size = filepath.stat().st_size
+                    print(f"   ✅ Screenshot saved: {filename} ({file_size} bytes)")
+                else:
+                    print(f"   ❌ Failed to take screenshot")
+        
+        finally:
+            web_handler.stop_driver()
+            print(f"\n🎉 Web screenshot test completed!")
 
 if __name__ == "__main__":
     main()

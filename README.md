@@ -6,6 +6,7 @@ A production-ready Python daemon for continuous screenshot monitoring on Ubuntu/
 
 - ✅ **Continuous screenshot monitoring** - Takes screenshots at configurable intervals
 - ✅ **Multiple regions support** - Capture different screen areas simultaneously
+- ✅ **Web page screenshots** - Capture screenshots of web pages using headless browser
 - ✅ **Telegram integration** - Send screenshots to different Telegram groups per region
 - ✅ **Daemon service** - Runs as a systemd service with automatic startup
 - ✅ **Health monitoring** - Built-in health checks and system monitoring
@@ -20,8 +21,9 @@ A production-ready Python daemon for continuous screenshot monitoring on Ubuntu/
 
 - Ubuntu/Debian server
 - Python 3.6+
-- `pyautogui`, `Pillow`, and `requests` libraries
+- `pyautogui`, `Pillow`, `requests`, `selenium`, and `webdriver-manager` libraries
 - `xvfb` for headless operation
+- `firefox` for web screenshots
 - `systemd` for service management
 - Telegram bot (optional, for notifications)
 
@@ -157,6 +159,39 @@ python3 screenshot_cron.py single
 
 # Show configuration
 python3 screenshot_cron.py config
+
+# Test web screenshot functionality
+python3 screenshot_cron.py web-test
+```
+
+### Web Screenshot Configuration
+
+Configure web pages to capture in the main script:
+
+```python
+"web_screenshots": {
+    "enabled": True,
+    "browser": "firefox",  # 'firefox' or 'chrome'
+    "headless": True,
+    "window_size": (1920, 1080),
+    "urls": {
+        "google": {
+            "url": "https://www.google.com",
+            "wait_time": 3,
+            "element_selector": None,
+            "telegram_chat_id": "-1002745524480"
+        },
+        "github": {
+            "url": "https://github.com",
+            "wait_time": 5,
+            "element_selector": ".Header",
+            "telegram_chat_id": "-1002745524480"
+        }
+    },
+    "active_urls": ["google", "github"],
+    "interval": 300,  # 5 minutes
+    "delete_after_send": True
+}
 ```
 
 ### Command Line Options

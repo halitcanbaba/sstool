@@ -33,7 +33,13 @@ sudo apt-get install -y \
     python3-pip \
     python3-venv \
     xvfb \
-    systemd
+    systemd \
+    wget \
+    curl
+
+# Install Firefox for web screenshots
+echo "🦊 Installing Firefox..."
+sudo apt-get install -y firefox
 
 # Create screenshot user if it doesn't exist
 if ! id "screenshot" &>/dev/null; then
