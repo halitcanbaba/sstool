@@ -1060,8 +1060,16 @@ def main():
     parser.add_argument('--test-telegram', action='store_true', help='Test Telegram bot connection')
     parser.add_argument('--delete-after-send', action='store_true', help='Delete screenshots after successful Telegram send')
     parser.add_argument('--keep-after-send', action='store_true', help='Keep screenshots after Telegram send')
+    parser.add_argument('--web-url', help='URL for web screenshot test (used with web-test command)')
+    parser.add_argument('--web-screenshot', help='Take screenshot of specified URL (shorthand for web-test --web-url)')
+    parser.add_argument('url', nargs='?', help='URL for web screenshot (positional argument)')
     
     args = parser.parse_args()
+    
+    # Handle --web-screenshot shorthand
+    if args.web_screenshot:
+        args.command = 'web-test'
+        args.web_url = args.web_screenshot
     
     # Override config with command line arguments
     config = CONFIG.copy()
@@ -1222,9 +1230,15 @@ def main():
         """Test web screenshot functionality"""
         web_config = config.get("web_screenshots", {})
         
-        if not web_config.get("enabled", False):
-            print("❌ Web screenshots are disabled")
-            sys.exit(1)
+        # Handle --web-screenshot shorthand
+        if args.web_screenshot:
+            test_url = args.web_screenshot
+        elif args.web_url:
+            test_url = args.web_url
+        elif args.url:
+            test_url = args.url
+        else:
+            test_url = None
         
         print("🌐 Web Screenshot Test")
         print("=" * 25)
@@ -1234,9 +1248,9 @@ def main():
         
         # Initialize web handler
         web_handler = WebScreenshot(
-            browser=web_config["browser"],
-            headless=web_config["headless"],
-            window_size=web_config["window_size"]
+            browser=web_config.get("browser", "firefox"),
+            headless=web_config.get("headless", True),
+            window_size=web_config.get("window_size", [1920, 1080])
         )
         
         if not web_handler.start_driver():
@@ -1247,12 +1261,39 @@ def main():
             output_dir = Path(config["output_dir"])
             output_dir.mkdir(exist_ok=True)
             
+            # If a specific URL is provided, test that URL
+            if test_url:
+                print(f"🎯 Testing URL: {test_url}")
+                
+                # Generate test filename
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                filename = f"web_test_{timestamp}.png"
+                filepath = output_dir / filename
+                
+                # Take screenshot
+                success = web_handler.take_screenshot(
+                    url=test_url,
+                    output_path=str(filepath),
+                    wait_time=3,
+                    element_selector=None
+                )
+                
+                if success:
+                    file_size = filepath.stat().st_size
+                    print(f"   ✅ Screenshot saved: {filename} ({file_size} bytes)")
+                    return
+                else:
+                    print(f"   ❌ Failed to take screenshot")
+                    return
+            
+            # Otherwise test configured URLs
             active_urls = web_config.get("active_urls", [])
             if not active_urls:
-                print("❌ No active URLs configured")
+                print("❌ No active URLs configured and no URL specified")
+                print("💡 Usage: python3 screenshot_cron.py web-test --web-url https://www.google.com")
                 sys.exit(1)
             
-            print(f"🎯 Testing {len(active_urls)} URL(s)...")
+            print(f"🎯 Testing {len(active_urls)} configured URL(s)...")
             
             for url_name in active_urls:
                 if url_name not in web_config["urls"]:
