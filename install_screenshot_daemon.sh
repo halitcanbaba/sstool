@@ -9,7 +9,16 @@ echo "=============================================="
 # Check if running as root
 if [[ $EUID -eq 0 ]]; then
    echo "❌ This script should not be run as root"
+   echo "💡 Please run as a regular user: ./install_screenshot_daemon.sh"
+   echo "   The script will use sudo internally when needed."
    exit 1
+fi
+
+# Check if sudo is available
+if ! command -v sudo &> /dev/null; then
+    echo "❌ sudo is required but not installed"
+    echo "💡 Please install sudo first: apt-get install sudo"
+    exit 1
 fi
 
 # Update system
