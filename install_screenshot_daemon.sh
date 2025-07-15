@@ -66,6 +66,14 @@ sudo chown -R screenshot:screenshot /var/screenshots
 sudo chmod +x /opt/screenshot-daemon/screenshot_cron.py
 sudo chmod 644 /etc/systemd/system/screenshot-daemon.service
 
+# Ensure screenshot user can write to /var/run for PID file
+sudo chown screenshot:screenshot /var/run
+sudo chmod 755 /var/run
+
+# Set proper permissions for screenshot directories
+sudo chmod 755 /var/screenshots
+sudo chmod 755 /opt/screenshot-daemon
+
 # Create Python virtual environment
 echo "🐍 Setting up Python environment..."
 sudo -u screenshot python3 -m venv /opt/screenshot-daemon/venv

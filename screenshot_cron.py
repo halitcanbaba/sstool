@@ -54,7 +54,7 @@ except ImportError as e:
 
 # Configuration
 CONFIG = {
-    "output_dir": "/Users/primetech/Documents/ss/screenshots",
+    "output_dir": "/var/screenshots",
     "regions": {
         "full_screen": None,  # None means full screen
         "top_left": (0, 0, 960, 540),  # Top-left quarter
@@ -126,7 +126,7 @@ CONFIG = {
 }
 
 # PID file for daemon management
-PID_FILE = "/Users/primetech/Documents/ss/screenshot-daemon.pid"
+PID_FILE = "/var/run/screenshot-daemon.pid"
 
 # Disable pyautogui fail-safe (important for headless operation)
 pyautogui.FAILSAFE = False
@@ -318,13 +318,31 @@ class ScreenshotDaemon:
         
         log_file = self.output_dir / "screenshot_daemon.log"
         
+        # Try to create a test file to check permissions
+        try:
+            test_file = self.output_dir / "test_permissions.tmp"
+            test_file.write_text("permission test")
+            test_file.unlink()
+        except Exception as e:
+            print(f"Warning: Cannot write to {self.output_dir}: {e}")
+            # Fall back to /tmp for logging
+            log_file = Path("/tmp/screenshot_daemon.log")
+            print(f"Using fallback log file: {log_file}")
+        
+        # Configure logging handlers
+        handlers = [logging.StreamHandler(sys.stdout)]
+        
+        # Add file handler only if we can write to the log file
+        try:
+            handlers.append(logging.FileHandler(log_file))
+        except Exception as e:
+            print(f"Warning: Cannot create log file {log_file}: {e}")
+            print("Logging will only go to stdout")
+        
         logging.basicConfig(
             level=getattr(logging, self.config["log_level"]),
             format="%(asctime)s [%(levelname)s] %(message)s",
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(sys.stdout)
-            ]
+            handlers=handlers
         )
         self.logger = logging.getLogger(__name__)
     
@@ -510,7 +528,8 @@ class ScreenshotDaemon:
             deleted_count = 0
             # Include all region patterns
             patterns = [f"{region_name}_*.png" for region_name in self.regions.keys()]
-            patterns.append("screenshot_*.png" # Legacy pattern
+            patterns.append("screenshot_*.png")  # Legacy pattern
+            patterns.append("web_*.png")  # Web screenshot pattern
             
             files = []
             for pattern in patterns:
@@ -827,7 +846,8 @@ class ScreenshotManager:
             deleted_count = 0
             # Include all region patterns
             patterns = [f"{region_name}_*.png" for region_name in self.regions.keys()]
-            patterns.append("screenshot_*.png" # Legacy pattern
+            patterns.append("screenshot_*.png")  # Legacy pattern
+            patterns.append("web_*.png")  # Web screenshot pattern
             
             files = []
             for pattern in patterns:
